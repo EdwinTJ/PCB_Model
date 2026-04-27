@@ -1,0 +1,126 @@
+ What is an epoch
+
+  One epoch = one full pass through the entire training set.
+
+  You have 8,208 training images, batch size 8 → that's 8208 / 8 = 1026 steps per epoch. After 1026 steps every image has been seen once. That's an epoch.
+
+  The model usually needs to see each image many times (with different random augmentations — crops, flips, color shifts) before the weights settle. That's why 72 epochs is the
+  target — it's not "72 different things to learn", it's "see the same data 72 times until the loss stops dropping".
+
+  What happens if you run 10 more, then 10 more?
+
+  If you resume from the checkpoint, the training picks up where it left off — same weights, same optimizer state (momentum, learning rate schedule position), epoch counter
+  continues. So 10+10+10 ≈ one continuous run of 30 epochs.
+
+  If you don't resume properly (e.g. start from the COCO pretrain again), you throw away the PCB knowledge the 10 epochs gave you. Always use -r to continue.
+
+  The mAP curve typically looks like: fast climb early → slowing → plateau. You're still in the "fast climb" zone. Realistic expectation: going from 10 → 50 epochs probably gains
+  you 4–8 mAP@50:95 points. Then diminishing returns.
+
+  The learning-rate schedule matters
+
+  Your config uses FlatCosine with flat_epoch: 5, no_aug_epoch: 2, epoches: 10. That schedule is designed for a 10-epoch run. If you just bump epoches: 50, the schedule rescales —
+   that's fine, but make sure flat_epoch and no_aug_epoch are scaled too (e.g. flat=25, no_aug=10 for a 50-epoch run). This is a thing people forget and then wonder why their
+  longer run is worse.
+
+  ---
+  Part 2 — Where to actually run it
+
+  ┌────────────────┬────────────┬──────────────────┬──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │     Option     │    VRAM    │       Cost       │                                                        Suitable?                                                         │
+  ├────────────────┼────────────┼──────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Colab Free     │ 16 GB      │ $0               │ Yes, but: ~12h session cap, random disconnects, slower. Use checkpoint_freq: 2 (already set) and resume after each       │
+  │ (T4)           │            │                  │ disconnect. Each epoch maybe 20–30 min. 60 more epochs = a lot of restarts.                                              │
+  ├────────────────┼────────────┼──────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Colab Pro      │ T4/L4/A100 │ $10/mo + compute │ Better stability, longer sessions. Reasonable for this.                                                                  │
+  │ ($10/mo)       │            │  units           │                                                                                                                          │
+  ├────────────────┼────────────┼──────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Lambda 1× A100 │ 40 GB      │ ~$1.10/hr        │ Probably finishes 60 epochs in 6–10 hours = $7–$12 total. Best $/result.                                                 │
+  │  40GB          │            │ on-demand        │                                                                                                                          │
+  ├────────────────┼────────────┼──────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Lambda 1× H100 │ 80 GB      │ ~$2.50/hr        │ Overkill, faster.                                                                                                        │
+  ├────────────────┼────────────┼──────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Buy a GPU      │ varies     │ $$$$             │ Only worth it if you'll train repeatedly long-term. RTX 4090 (24GB) is the sweet spot for this kind of work, but you're  │
+  │                │            │                  │ spending $1500+ to save maybe $50 of cloud time on this one model.                                                       │
+  └────────────────┴────────────┴──────────────────┴──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+  My recommendation for your case: free Colab to validate the workflow runs end-to-end (do 1–2 epochs, confirm checkpoints save, mAP improves), then rent a Lambda A100 for one
+  session to push it to 50–72 epochs. Total cost ~$10.
+
+  ---
+  Part 3 — How to actually resume the training
+
+  Step A: fix the dataset paths in the config
+
+  Open configs/rtv4/rtv4_hgnetv2_x_pcb.yml. You'll see lines like:
+
+  img_folder: /content/drive/MyDrive/RTDETRv4 (1)/dataset/images/train
+  ann_file:  /content/drive/MyDrive/RTDETRv4 (1)/dataset/annotations/instances_train.json
+
+  Those are Colab paths. Once your DsPCBSD+.zip finishes extracting, find the actual Data_COCO folder structure — it should have images/ and annotations/ (or similar). Update the
+  four path lines (train img, train ann, val img, val ann) to point there. Use the COCO format folder, not YOLO.
+
+  Same fix for teacher_model.dinov3_repo_path and dinov3_weights_path if you keep DSI distillation on. (If DINOv3 weights aren't downloaded locally, the simplest path is to
+  disable distillation — remove 'distill' from the losses: list in RTv4Criterion. You lose a small amount of regularization but training still works.)
+
+  Step B: scale the epoch schedule
+
+  For a longer run, edit:
+  epoches: 50          # was 10
+  flat_epoch: 25       # was 5  (half of total, like the original ratio)
+  no_aug_epoch: 10     # was 2
+  And also bump policy.epoch: 50 and collate_fn.stop_epoch: 50 in the train_dataloader section so augmentation policies extend properly.
+
+  Step C: download your existing checkpoint locally
+
+  from huggingface_hub import hf_hub_download
+  ckpt = hf_hub_download(repo_id="mcthebest/PCB_RTDETR", filename="last.pth")
+  # place at outputs/rtv4_hgnetv2_x_pcb/last.pth
+
+  Step D: run training with -r (resume)
+
+  python train.py -c configs/rtv4/rtv4_hgnetv2_x_pcb.yml -r outputs/rtv4_hgnetv2_x_pcb/last.pth --use-amp
+
+  -r = resume: loads weights, optimizer state, EMA, and epoch counter. Training continues from epoch 11.
+
+  There's also -t (tuning): loads only weights, restarts epoch 0 / fresh optimizer. Use -t when starting from a different checkpoint (e.g. fresh COCO pretrain) — not what you want
+   here.
+
+  After training, the new best checkpoint will be in outputs/rtv4_hgnetv2_x_pcb/. That's your improved model; point app.py at it.
+
+  On Colab specifically
+
+  - Mount Drive, store the dataset there, store outputs/ there → checkpoints survive disconnects.
+  - After a disconnect, just re-run the same command — -r picks up from last.pth.
+  - Watch RAM. T4 + batch 8 + DSI teacher is tight. If OOM, drop total_batch_size to 4 and halve learning rate proportionally, or disable distillation.
+
+  ---
+  Part 4 — Active learning loop with your own photos (later)
+
+  The intuition: the current model is good at AOI-lit DsPCBSD+ images but will be weaker on photos from your camera/lighting (the README calls this out — "domain adaptation"). The
+   loop:
+
+  1. Collect a batch of your own PCB photos.
+  2. Run inference with the current model. Save the predicted boxes.
+  3. Triage the predictions: keep the ones the model is uncertain about (low confidence) or clearly wrong. These are the highest-information samples — labeling 100 confusing
+  images teaches the model more than labeling 1000 easy ones. That's the "active" part of active learning.
+  4. Label them properly (CVAT, Label Studio, Roboflow are common tools; output COCO JSON to match the existing format).
+  5. Mix them into the training set — usually you don't replace, you add. Keep DsPCBSD+ as the base so the model doesn't forget; add your samples on top. Class balance matters.
+  6. Fine-tune from the current best checkpoint for a small number of epochs (5–15 is usually enough for a domain-adaptation pass) with a lower learning rate (e.g. 5e-5 instead of
+   2e-4) to avoid wrecking what it already knows. This is continual fine-tuning.
+  7. Evaluate on a held-out set of your own photos. If mAP improved, ship. If it dropped on the original DsPCBSD+ val set, you have catastrophic forgetting — fix by mixing more
+  original data per batch or lowering LR further.
+  8. Repeat from step 1.
+
+  You don't need to do this until your current-model training is done and deployed. One thing at a time.
+
+  ---
+  TL;DR action list
+
+  1. Finish extracting DsPCBSD+.zip, locate the COCO format folder.
+  2. Edit the four dataset paths in configs/rtv4/rtv4_hgnetv2_x_pcb.yml.
+  3. Bump epoches, flat_epoch, no_aug_epoch, policy.epoch, stop_epoch for a longer run (e.g. 50).
+  4. Optional: disable distill loss if you don't want to set up DINOv3 weights locally.
+  5. Place last.pth at outputs/rtv4_hgnetv2_x_pcb/last.pth.
+  6. Run python train.py -c <config> -r outputs/rtv4_hgnetv2_x_pcb/last.pth --use-amp.
+  7. Validate the loop on free Colab for 1–2 epochs, then rent an A100 for a single session to finish.

@@ -1,0 +1,21 @@
+streamlit>=1.44.0
+matplotlib
+Pillow
+numpy
+torch>=2.0.0
+torchvision>=0.15.0
+PyYAML
+scipy
+calflops
+transformers
+
+# ── DINOv3 requirements (needed for engine imports) ────────────────
+ftfy
+omegaconf
+regex
+scikit-learn
+submitit
+termcolor
+tensorboard
+huggingface_hub
+faster-coco-eval>=1.6.5
