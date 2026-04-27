@@ -148,11 +148,17 @@ def load_model():
     ROOT = Path(__file__).resolve().parent
     sys.path.insert(0, str(ROOT))
 
-    ckpt_path = Path(hf_hub_download(
-        repo_id="mcthebest/PCB_RTDETR",
-        repo_type="model",
-        filename="last.pth",
-    ))
+    local_ckpt = ROOT / "outputs" / "rtv4_hgnetv2_x_pcb" / "last.pth"
+    if local_ckpt.exists():
+        print(f"Using local checkpoint: {local_ckpt}")
+        ckpt_path = local_ckpt
+    else:
+        print(f"Local checkpoint not found, downloading from HF")
+        ckpt_path = Path(hf_hub_download(
+            repo_id="mcthebest/PCB_RTDETR",
+            repo_type="model",
+            filename="last.pth",
+        ))
     cfg_path = ROOT / "configs" / "rtv4" / "rtv4_hgnetv2_x_pcb.yml"
     device = "cuda" if torch.cuda.is_available() else "cpu"
 

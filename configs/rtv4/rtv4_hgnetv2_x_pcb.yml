@@ -30,7 +30,7 @@ train_dataloader:
         - {type: ConvertBoxes, fmt: 'cxcywh', normalize: True}
       policy:
         name: stop_epoch
-        epoch: 12
+        epoch: 50
         ops: ['RandomPhotometricDistort', 'RandomZoomOut', 'RandomIoUCrop']
       mosaic_prob: 0.0
   shuffle: True
@@ -40,7 +40,7 @@ train_dataloader:
     type: BatchImageCollateFunction
     base_size: 640
     base_size_repeat: 1
-    stop_epoch: 12
+    stop_epoch: 50
     ema_restart_decay: 0.9998
     mixup_prob: 0.0
     mixup_epochs: [0, 0]
@@ -165,9 +165,9 @@ optimizer:
 lrsheduler: flatcosine
 lr_gamma: 0.5
 warmup_iter: 500
-flat_epoch: 6
-no_aug_epoch: 2
-epoches: 12
+flat_epoch: 25
+no_aug_epoch: 10
+epoches: 50
 
 scaler:
   type: GradScaler

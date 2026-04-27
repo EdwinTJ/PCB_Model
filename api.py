@@ -40,6 +40,7 @@ from engine.core import YAMLConfig  # noqa: E402
 CKPT_REPO = "mcthebest/PCB_RTDETR"
 CKPT_FILE = "last.pth"
 CFG_REL = "configs/rtv4/rtv4_hgnetv2_x_pcb.yml"
+LOCAL_CKPT = "outputs/rtv4_hgnetv2_x_pcb/last.pth"
 
 CLASS_ABBR = {
     0: "SH", 1: "SP", 2: "SC", 3: "OP", 4: "MB",
@@ -75,7 +76,13 @@ state: dict = {"model": None, "device": "cpu"}
 
 def load_model() -> tuple[nn.Module, str]:
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    ckpt_path = hf_hub_download(repo_id=CKPT_REPO, repo_type="model", filename=CKPT_FILE)
+    local_ckpt = ROOT / LOCAL_CKPT
+    if local_ckpt.exists():
+        print(f"Using local checkpoint: {local_ckpt}")
+        ckpt_path = str(local_ckpt)
+    else:
+        print(f"Local checkpoint not found at {local_ckpt}, downloading from {CKPT_REPO}")
+        ckpt_path = hf_hub_download(repo_id=CKPT_REPO, repo_type="model", filename=CKPT_FILE)
     cfg_path = ROOT / CFG_REL
 
     cfg = YAMLConfig(str(cfg_path), resume=str(ckpt_path))
