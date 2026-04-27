@@ -13,8 +13,8 @@ train_dataloader:
   total_batch_size: 8
   dataset:
     type: CocoDetection
-    img_folder: /content/drive/MyDrive/RTDETRv4 (1)/dataset/images/train
-    ann_file: /content/drive/MyDrive/RTDETRv4 (1)/dataset/annotations/instances_train.json
+    img_folder: /content/DsPCBSD+/Data_COCO/train2017
+    ann_file: /content/DsPCBSD+/Data_COCO/annotations/instances_train2017.json
     return_masks: False
     transforms:
       type: Compose
@@ -30,7 +30,7 @@ train_dataloader:
         - {type: ConvertBoxes, fmt: 'cxcywh', normalize: True}
       policy:
         name: stop_epoch
-        epoch: 10
+        epoch: 50
         ops: ['RandomPhotometricDistort', 'RandomZoomOut', 'RandomIoUCrop']
       mosaic_prob: 0.0
   shuffle: True
@@ -40,7 +40,7 @@ train_dataloader:
     type: BatchImageCollateFunction
     base_size: 640
     base_size_repeat: 1
-    stop_epoch: 10
+    stop_epoch: 50
     ema_restart_decay: 0.9998
     mixup_prob: 0.0
     mixup_epochs: [0, 0]
@@ -50,8 +50,8 @@ val_dataloader:
   total_batch_size: 8
   dataset:
     type: CocoDetection
-    img_folder: /content/drive/MyDrive/RTDETRv4 (1)/dataset/images/val
-    ann_file: /content/drive/MyDrive/RTDETRv4 (1)/dataset/annotations/instances_val.json
+    img_folder: /content/DsPCBSD+/Data_COCO/val2017
+    ann_file: /content/DsPCBSD+/Data_COCO/annotations/instances_val2017.json
     return_masks: False
     transforms:
       type: Compose
@@ -164,9 +164,9 @@ optimizer:
 lrsheduler: flatcosine
 lr_gamma: 0.5
 warmup_iter: 500
-flat_epoch: 5
-no_aug_epoch: 2
-epoches: 10
+flat_epoch: 25
+no_aug_epoch: 10
+epoches: 50
 
 scaler:
   type: GradScaler
